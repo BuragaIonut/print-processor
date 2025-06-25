@@ -26,7 +26,7 @@ def get_dominant_colors(img, num_colors=5):
     return dominant if dominant else [(128, 128, 128)]
 
 def create_content_aware_bleed(img, bleed_px):
-    """Create intelligent content-aware bleed"""
+    """Create intelligent content-aware bleed with proper corner handling"""
     width, height = img.size
     new_width = width + (2 * bleed_px)
     new_height = height + (2 * bleed_px)
@@ -37,31 +37,74 @@ def create_content_aware_bleed(img, bleed_px):
     # Create base with dominant color
     bleed_img = Image.new('RGB', (new_width, new_height), dominant_colors[0])
     
-    # Add subtle texture using edge extension
     if bleed_px > 0:
-        # Extend edges with fade effect - corrected gradient direction
+        # Get corner pixels for smooth corner transitions
+        corner_tl = img.getpixel((0, 0))
+        corner_tr = img.getpixel((width-1, 0))
+        corner_bl = img.getpixel((0, height-1))
+        corner_br = img.getpixel((width-1, height-1))
+        
+        # Create corner gradients first to avoid overlap issues
+        for y in range(bleed_px):
+            for x in range(bleed_px):
+                # Calculate distances from corner
+                dist_from_corner = max(x, y)
+                corner_fade = dist_from_corner / bleed_px
+                
+                # Top-left corner
+                corner_color = Image.blend(
+                    Image.new('RGB', (1, 1), dominant_colors[0]), 
+                    Image.new('RGB', (1, 1), corner_tl), 
+                    corner_fade
+                ).getpixel((0, 0))
+                bleed_img.putpixel((x, y), corner_color)
+                
+                # Top-right corner
+                corner_color = Image.blend(
+                    Image.new('RGB', (1, 1), dominant_colors[0]), 
+                    Image.new('RGB', (1, 1), corner_tr), 
+                    corner_fade
+                ).getpixel((0, 0))
+                bleed_img.putpixel((new_width - 1 - x, y), corner_color)
+                
+                # Bottom-left corner
+                corner_color = Image.blend(
+                    Image.new('RGB', (1, 1), dominant_colors[0]), 
+                    Image.new('RGB', (1, 1), corner_bl), 
+                    corner_fade
+                ).getpixel((0, 0))
+                bleed_img.putpixel((x, new_height - 1 - y), corner_color)
+                
+                # Bottom-right corner
+                corner_color = Image.blend(
+                    Image.new('RGB', (1, 1), dominant_colors[0]), 
+                    Image.new('RGB', (1, 1), corner_br), 
+                    corner_fade
+                ).getpixel((0, 0))
+                bleed_img.putpixel((new_width - 1 - x, new_height - 1 - y), corner_color)
+        
+        # Now extend edges (but skip corners to avoid overlap)
         for i in range(bleed_px):
-            # Reverse the fade ratio so it starts with dominant color (margin) 
-            # and fades to edge color as it approaches the image
-            fade_ratio = i / bleed_px  # Now 0 at margin, 1 near image
+            fade_ratio = i / bleed_px
             
-            # Top edge
+            # Top edge (skip corners)
             top_line = img.crop((0, 0, width, 1))
             top_faded = Image.blend(Image.new('RGB', (width, 1), dominant_colors[0]), top_line, fade_ratio)
-            top_scaled = top_faded.resize((width, 1))
-            bleed_img.paste(top_scaled, (bleed_px, i))
+            # Only paste the middle part, not corners
+            middle_top = top_faded.crop((0, 0, width, 1))
+            bleed_img.paste(middle_top, (bleed_px, i))
             
-            # Bottom edge
+            # Bottom edge (skip corners)
             bottom_line = img.crop((0, height-1, width, height))
             bottom_faded = Image.blend(Image.new('RGB', (width, 1), dominant_colors[0]), bottom_line, fade_ratio)
             bleed_img.paste(bottom_faded, (bleed_px, new_height - 1 - i))
             
-            # Left edge  
+            # Left edge (skip corners)
             left_line = img.crop((0, 0, 1, height))
             left_faded = Image.blend(Image.new('RGB', (1, height), dominant_colors[0]), left_line, fade_ratio)
             bleed_img.paste(left_faded, (i, bleed_px))
             
-            # Right edge
+            # Right edge (skip corners)
             right_line = img.crop((width-1, 0, width, height))
             right_faded = Image.blend(Image.new('RGB', (1, height), dominant_colors[0]), right_line, fade_ratio)
             bleed_img.paste(right_faded, (new_width - 1 - i, bleed_px))
