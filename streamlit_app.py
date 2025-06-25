@@ -7,8 +7,6 @@ import os
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
-print("API KEY SET")
-print(os.getenv("OPENAI_API_KEY"))
 # Import from our modules
 from print_settings import PRINT_FORMATS, mm_to_inches, resize_image_for_print
 from bleed import add_bleed
