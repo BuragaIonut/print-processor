@@ -188,9 +188,17 @@ def main():
     st.sidebar.header("📋 Print Settings")
     
     # Print format selection
+    def format_display_func(format_key):
+        if format_key == "Custom":
+            return "Custom"
+        else:
+            dimensions = PRINT_FORMATS[format_key]
+            return f"{format_key} ({dimensions[0]}×{dimensions[1]}mm)"
+    
     format_name = st.sidebar.selectbox(
         "Printing Format",
         list(PRINT_FORMATS.keys()),
+        format_func=format_display_func,
         index=0
     )
     
@@ -204,22 +212,45 @@ def main():
         st.sidebar.write(f"**{format_name}**: {format_size[0]} × {format_size[1]} mm")
     
     # DPI selection
-    dpi_options = [72, 150, 300, 600]
-    dpi = st.sidebar.selectbox(
+    dpi_options = [72, 150, 300, 600, "Custom"]
+    
+    def dpi_display_func(dpi_value):
+        if dpi_value == "Custom":
+            return "Custom DPI"
+        else:
+            return f"{dpi_value} DPI"
+    
+    selected_dpi = st.sidebar.selectbox(
         "DPI (Print Quality)",
         dpi_options,
+        format_func=dpi_display_func,
         index=2,  # Default to 300 DPI
         help="Higher DPI = better quality but larger file size"
     )
     
-    # DPI info
-    dpi_info = {
-        72: "Screen display",
-        150: "Draft printing", 
-        300: "Good quality printing",
-        600: "High quality printing"
-    }
-    st.sidebar.write(f"*{dpi_info[dpi]}*")
+    # Handle custom DPI input
+    if selected_dpi == "Custom":
+        dpi = st.sidebar.number_input(
+            "Custom DPI Value",
+            min_value=50,
+            max_value=2400,
+            value=300,
+            step=25,
+            help="Enter your desired DPI (recommended: 150-1200)"
+        )
+        dpi_description = f"Custom ({dpi} DPI)"
+    else:
+        dpi = selected_dpi
+        # DPI info
+        dpi_info = {
+            72: "Screen display",
+            150: "Draft printing", 
+            300: "Good quality printing",
+            600: "High quality printing"
+        }
+        dpi_description = dpi_info[dpi]
+    
+    st.sidebar.write(f"*{dpi_description}*")
     
     # Padding settings
     st.sidebar.subheader("📦 Padding Settings")
