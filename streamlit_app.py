@@ -309,6 +309,8 @@ def main():
         padding_style = "content_aware"
         ai_style = "natural"
         custom_prompt = None
+        remove_objects = False
+        object_removal_sensitivity = 0.3
     
     # Bleed settings
     st.sidebar.subheader("📐 Bleed Settings")
