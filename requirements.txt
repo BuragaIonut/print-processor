@@ -1,0 +1,8 @@
+streamlit
+Pillow
+PyMuPDF
+pathlib
+numpy 
+rembg
+opencv-python
+python-dotenv
