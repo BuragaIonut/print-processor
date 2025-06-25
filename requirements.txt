@@ -2,7 +2,6 @@ streamlit
 Pillow
 PyMuPDF
 pathlib
-numpy 
-rembg
+numpy
 opencv-python
 python-dotenv
