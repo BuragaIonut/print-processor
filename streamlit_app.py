@@ -209,7 +209,6 @@ def main():
         format_size = (custom_width, custom_height)
     else:
         format_size = PRINT_FORMATS[format_name]
-        st.sidebar.write(f"**{format_name}**: {format_size[0]} × {format_size[1]} mm")
     
     # DPI selection
     dpi_options = [72, 150, 300, 600, "Custom"]
