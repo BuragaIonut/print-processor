@@ -7,6 +7,34 @@ import os
 from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv())
 
+def create_pdf_from_image(image, format_size, dpi):
+    """Create a PDF document from a processed image with exact page dimensions"""
+    # Create new PDF document
+    pdf_doc = fitz.open()
+    
+    # Convert format size from mm to points (PDF unit)
+    # 1 mm = 2.834645669 points
+    mm_to_points = 2.834645669
+    page_width = format_size[0] * mm_to_points
+    page_height = format_size[1] * mm_to_points
+    
+    # Create page with exact dimensions
+    page = pdf_doc.new_page(width=page_width, height=page_height)
+    
+    # Convert PIL Image to bytes
+    img_buffer = io.BytesIO()
+    image.save(img_buffer, format='PNG', dpi=(dpi, dpi))
+    img_buffer.seek(0)
+    img_bytes = img_buffer.getvalue()
+    
+    # Insert image to fill entire page
+    page.insert_image(
+        fitz.Rect(0, 0, page_width, page_height),  # Full page rectangle
+        stream=img_bytes
+    )
+    
+    return pdf_doc
+
 # Import from our modules
 from print_settings import PRINT_FORMATS, mm_to_inches, resize_image_for_print
 from bleed import add_bleed
@@ -481,6 +509,9 @@ def main():
                 # Process the uploaded file
                 original_img = process_uploaded_file(uploaded_file)
                 
+                # Detect input format for output matching
+                is_pdf_input = uploaded_file.type == "application/pdf"
+                
                 if original_img is not None:
                     # Show original image info
                     st.subheader("📸 Original Image")
@@ -646,20 +677,36 @@ def main():
                         if rotation_applied:
                             st.write(f"**Auto-Rotation:** 90° applied to match format orientation")
                     
-                    # Download button
+                    # Download button - match input format
                     output_buffer = io.BytesIO()
-                    processed_img.save(output_buffer, format='PNG', dpi=(dpi, dpi))
-                    output_buffer.seek(0)
-                    
-                    # Generate filename
                     original_name = Path(uploaded_file.name).stem
-                    output_filename = f"{original_name}_print_{format_name}_{dpi}dpi.png"
+                    
+                    if is_pdf_input:
+                        # Create PDF output for PDF input
+                        pdf_doc = create_pdf_from_image(processed_img, format_size, dpi)
+                        pdf_bytes = pdf_doc.tobytes()
+                        pdf_doc.close()
+                        
+                        output_buffer.write(pdf_bytes)
+                        output_buffer.seek(0)
+                        
+                        output_filename = f"{original_name}_print_{format_name}_{dpi}dpi.pdf"
+                        mime_type = "application/pdf"
+                        file_format_display = "PDF"
+                    else:
+                        # Create PNG output for image input
+                        processed_img.save(output_buffer, format='PNG', dpi=(dpi, dpi))
+                        output_buffer.seek(0)
+                        
+                        output_filename = f"{original_name}_print_{format_name}_{dpi}dpi.png"
+                        mime_type = "image/png"
+                        file_format_display = "PNG"
                     
                     st.download_button(
-                        label="📥 Download Print-Ready File",
+                        label=f"📥 Download Print-Ready {file_format_display}",
                         data=output_buffer.getvalue(),
                         file_name=output_filename,
-                        mime="image/png"
+                        mime=mime_type
                     )
                     
                     # Show processing summary
@@ -668,15 +715,15 @@ def main():
                     
                     with col1:
                         st.metric("Original Size", f"{orig_width}×{orig_height}px")
-                        st.metric("Print Format", format_name)
+                        st.metric("Input Format", "PDF" if is_pdf_input else "Image")
                     
                     with col2:
                         st.metric("Final Size", f"{final_width}×{final_height}px")
-                        st.metric("DPI", dpi)
+                        st.metric("Print Format", format_name)
                     
                     with col3:
-                        st.metric("Bleed Type", bleed_types[bleed_type])
-                        st.metric("Cut Line Color", cut_line_colors[cut_line_color] if add_cut_lines_flag and bleed_mm > 0 else "None")
+                        st.metric("Output Format", file_format_display)
+                        st.metric("DPI", dpi)
 
 if __name__ == "__main__":
     main() 
