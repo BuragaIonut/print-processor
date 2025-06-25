@@ -45,7 +45,8 @@ from cut_lines import add_cut_lines
 st.set_page_config(
     page_title="Print Processor",
     page_icon="🖨️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Remove PIL image size limit
