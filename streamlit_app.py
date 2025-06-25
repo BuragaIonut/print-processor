@@ -635,7 +635,6 @@ def main():
     if auto_rotate:
         st.sidebar.info("📐 Image will be automatically rotated if needed to prevent stretching")
     
-
     # Shape-aware processing
     st.sidebar.subheader("🎯 Smart Shape Detection")
     shape_aware_mode = st.sidebar.checkbox(
@@ -790,7 +789,6 @@ def main():
                         else:
                             st.info("📐 Square image detected - no rotation needed")
                     
-
                     # Process the image
                     # Calculate the actual image content area (working backwards from final format)
                     # Recalculate dimensions for processing
@@ -965,8 +963,6 @@ def main():
                     
                     if rotation_applied:
                         info_html += f"<strong>Auto-Rotation:</strong> 90° applied to match format orientation<br>"
-                    
-
                     
                     info_html += "</div>"
                     st.markdown(info_html, unsafe_allow_html=True)
