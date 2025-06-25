@@ -428,7 +428,7 @@ def main():
         "Cut Line Color",
         options=list(cut_line_colors.keys()),
         format_func=lambda x: cut_line_colors[x],
-        index=0,  # Default to black
+        index=4,  # Default to black
         help="Color for the cut guide lines"
     )
     
