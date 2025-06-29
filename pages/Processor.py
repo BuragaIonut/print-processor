@@ -40,15 +40,6 @@ from print_settings import PRINT_FORMATS, mm_to_inches, resize_image_for_print
 from bleed import add_bleed
 from cut_lines import add_cut_lines
 
-
-# Set page config
-st.set_page_config(
-    page_title="Print Processor",
-    page_icon="🖨️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 # Remove PIL image size limit
 Image.MAX_IMAGE_PIXELS = None
 
@@ -104,81 +95,153 @@ def process_uploaded_file(uploaded_file):
         return None
 
 def process_for_print(img, format_size, dpi, padding_mm, padding_style, ai_style, custom_prompt, remove_objects, object_removal_sensitivity, bleed_mm, bleed_type, bleed_color, add_cut_lines_flag, cut_line_color):
-    """Complete print processing pipeline with support for all padding methods"""
+    """Complete print processing pipeline with support for AI Advanced padding and bleed"""
     width_mm, height_mm = format_size
     intermediate_images = {}
     
-    # Step 1: Resize to exact print dimensions first (for non-AI padding methods)
-    if padding_style != "ai_advanced":
-        st.write("🔄 Resizing image to target dimensions...")
+    # Determine if we're using AI Advanced for padding or bleed
+    use_ai_padding = padding_style == "ai_advanced" and padding_mm > 0
+    use_ai_bleed = bleed_type == "ai_advanced" and bleed_mm > 0
+    
+    # Convert mm to pixels for AI processing
+    base_dpi = 300  # Standard base resolution for AI processing
+    from print_settings import mm_to_pixels
+    padding_px = mm_to_pixels(padding_mm, base_dpi) if padding_mm > 0 else 0
+    bleed_px = mm_to_pixels(bleed_mm, base_dpi) if bleed_mm > 0 else 0
+    
+    # AI Advanced workflow - three scenarios
+    if use_ai_padding and use_ai_bleed:
+        # Scenario 3: Both AI padding and AI bleed
+        st.write("🤖 AI Advanced: Padding + Bleed Combined")
+        if remove_objects:
+            st.write(f"🎯 Removing distracting objects (sensitivity: {object_removal_sensitivity})...")
+        st.write(f"📦 Adding {padding_mm}mm AI padding...")
+        st.write(f"📏 Adding {bleed_mm}mm AI bleed...")
+        
+        try:
+            from padding import create_ai_padding_and_bleed
+            processed_img, intermediate_images = create_ai_padding_and_bleed(
+                img, padding_px, bleed_px, custom_prompt, custom_prompt, 
+                remove_objects, object_removal_sensitivity
+            )
+            st.success("✅ AI padding + bleed completed successfully!")
+        except Exception as e:
+            st.error(f"❌ AI padding + bleed failed: {str(e)}")
+            return img, {}
+        
+        # Resize to final print dimensions
+        st.write("🔄 Resizing to target print dimensions...")
+        final_img = resize_image_for_print(processed_img, width_mm, height_mm, dpi)
+        
+    elif use_ai_padding and not use_ai_bleed:
+        # Scenario 1: Only AI padding
+        st.write("🤖 AI Advanced: Padding Only")
+        if remove_objects:
+            st.write(f"🎯 Removing distracting objects (sensitivity: {object_removal_sensitivity})...")
+        st.write(f"📦 Adding {padding_mm}mm AI padding...")
+        
+        try:
+            from padding import create_ai_padding
+            padded_img, intermediate_images = create_ai_padding(
+                img, padding_px, ai_style, custom_prompt, 
+                remove_objects, object_removal_sensitivity
+            )
+            st.success("✅ AI padding completed successfully!")
+        except Exception as e:
+            st.error(f"❌ AI padding failed: {str(e)}")
+            return img, {}
+        
+        # Resize AI-padded image to print dimensions
+        st.write("🔄 Resizing to target print dimensions...")
+        resized_img = resize_image_for_print(padded_img, width_mm, height_mm, dpi)
+        
+        # Add traditional bleed if needed
+        if bleed_mm > 0:
+            st.write(f"📏 Adding {bleed_mm}mm traditional bleed ({bleed_type})...")
+            final_img = add_bleed(resized_img, bleed_mm, dpi, bleed_type, bleed_color)
+        else:
+            final_img = resized_img
+            
+    elif not use_ai_padding and use_ai_bleed:
+        # Scenario 2: Only AI bleed
+        st.write("🤖 AI Advanced: Bleed Only")
+        
+        # First resize and add traditional padding if needed
+        st.write("🔄 Resizing to target dimensions...")
         resized_img = resize_image_for_print(img, width_mm, height_mm, dpi)
         
-        # Step 2: Add padding using traditional methods
+        if padding_mm > 0:
+            st.write(f"📦 Adding {padding_mm}mm traditional padding ({padding_style})...")
+            try:
+                from padding import add_padding
+                padded_img, padding_intermediates = add_padding(
+                    resized_img, padding_mm, dpi, padding_style, ai_style, 
+                    custom_prompt, remove_objects, object_removal_sensitivity
+                )
+                intermediate_images.update(padding_intermediates)
+            except Exception as e:
+                st.error(f"Error adding traditional padding: {str(e)}")
+                padded_img = resized_img
+        else:
+            padded_img = resized_img
+        
+        # Add AI bleed
+        st.write(f"📏 Adding {bleed_mm}mm AI bleed...")
+        try:
+            from padding import create_ai_bleed
+            final_img, bleed_intermediates = create_ai_bleed(
+                padded_img, bleed_px, custom_prompt, 
+                remove_objects, object_removal_sensitivity
+            )
+            intermediate_images.update(bleed_intermediates)
+            st.success("✅ AI bleed completed successfully!")
+        except Exception as e:
+            st.error(f"❌ AI bleed failed: {str(e)}")
+            final_img = padded_img
+    
+    else:
+        # Traditional workflow - no AI
+        st.write("🔄 Traditional Processing Workflow")
+        st.write("🔄 Resizing to target dimensions...")
+        resized_img = resize_image_for_print(img, width_mm, height_mm, dpi)
+        
+        # Add traditional padding if needed
         if padding_mm > 0:
             st.write(f"📦 Adding {padding_mm}mm padding ({padding_style})...")
             try:
                 from padding import add_padding
-                padded_img, padding_intermediates = add_padding(resized_img, padding_mm, dpi, padding_style, ai_style, custom_prompt, remove_objects, object_removal_sensitivity)
+                padded_img, padding_intermediates = add_padding(
+                    resized_img, padding_mm, dpi, padding_style, ai_style, 
+                    custom_prompt, remove_objects, object_removal_sensitivity
+                )
                 intermediate_images.update(padding_intermediates)
             except Exception as e:
                 st.error(f"Error adding padding: {str(e)}")
-                st.warning("Falling back to content-aware padding...")
-                from padding import add_padding
-                padded_img, padding_intermediates = add_padding(resized_img, padding_mm, dpi, 'content_aware', ai_style, custom_prompt, remove_objects, object_removal_sensitivity)
-                intermediate_images.update(padding_intermediates)
+                padded_img = resized_img
         else:
             padded_img = resized_img
-    else:
-        # Step 1: AI padding BEFORE resizing for print (special workflow for AI)
-        if padding_mm > 0:
-            if remove_objects:
-                st.write(f"🎯 Removing distracting objects (sensitivity: {object_removal_sensitivity})...")
-            st.write(f"🤖 Adding {padding_mm}mm AI-powered padding ({ai_style})...")
-            
-            # Convert padding from mm to pixels at original image resolution
-            # Use a base DPI for the AI processing (we'll scale to final DPI later)
-            base_dpi = 300  # Standard base resolution for AI processing
-            from print_settings import mm_to_pixels
-            padding_px = mm_to_pixels(padding_mm, base_dpi)
-            
-            try:
-                from padding import create_ai_padding
-                # AI padding happens at original image dimensions
-                padded_img, intermediate_images = create_ai_padding(
-                    img, 
-                    padding_px, 
-                    ai_style, 
-                    custom_prompt,
-                    remove_objects,
-                    object_removal_sensitivity
-                )
-                st.success("✅ AI padding completed successfully!")
-            except Exception as e:
-                st.error(f"Error adding AI padding: {str(e)}")
-                st.error("❌ AI padding failed - please check your OpenAI setup")
-                return img, {}  # Return original image if AI fails
-        else:
-            padded_img = img
         
-        # Step 2: Now resize the AI-padded image to exact print dimensions
-        st.write("🔄 Resizing to target print dimensions...")
-        padded_img = resize_image_for_print(padded_img, width_mm, height_mm, dpi)
+        # Add traditional bleed if needed
+        if bleed_mm > 0:
+            st.write(f"📏 Adding {bleed_mm}mm bleed ({bleed_type})...")
+            final_img = add_bleed(padded_img, bleed_mm, dpi, bleed_type, bleed_color)
+        else:
+            final_img = padded_img
     
-    # Step 3: Add bleed (outer area for cutting)
-    if bleed_mm > 0:
-        st.write(f"📏 Adding {bleed_mm}mm bleed ({bleed_type})...")
-        bleed_img = add_bleed(padded_img, bleed_mm, dpi, bleed_type, bleed_color)
-    else:
-        bleed_img = padded_img
-    
-    # Step 4: Add cut lines
+    # Add cut lines if requested
     if add_cut_lines_flag and bleed_mm > 0:
-        st.write(f"✂️ Adding {cut_line_color} cut lines...")
-        final_img = add_cut_lines(bleed_img, bleed_mm, dpi, cut_line_color)
-    else:
-        final_img = bleed_img
+        st.write(f"✂️ Adding cut lines ({cut_line_color})...")
+        final_img = add_cut_lines(final_img, bleed_mm, dpi, cut_line_color)
     
     return final_img, intermediate_images
+
+# Set page config
+st.set_page_config(
+    page_title="Processor - Print Processor",
+    page_icon="🖨️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 def main():
     st.title("🖨️ Print Processor")
@@ -318,23 +381,9 @@ def main():
                 else:
                     object_removal_sensitivity = 0.3
                 
-                # AI style selector
-                st.sidebar.subheader("🎨 AI Style")
-                ai_styles = {
-                    "natural": "Natural Extension",
-                    "artistic": "Artistic & Creative",
-                    "minimalist": "Minimalist & Clean",
-                    "textured": "Textured & Detailed",
-                    "blurred": "Blurred & Dreamy"
-                }
-                
-                ai_style = st.sidebar.selectbox(
-                    "AI Padding Style",
-                    options=list(ai_styles.keys()),
-                    format_func=lambda x: ai_styles[x],
-                    index=0,
-                    help="Style of AI-generated padding"
-                )
+                # AI style is now fixed to "natural" as requested by user
+                ai_style = "natural"
+                st.sidebar.info("🌿 AI Style: Natural Extension (optimized for gpt-image-1)")
                 
                 # Custom prompt option
                 use_custom_prompt = st.sidebar.checkbox(
@@ -354,7 +403,7 @@ def main():
                 else:
                     custom_prompt = None
                     
-                st.sidebar.info("🤖 AI-generated contextual padding using DALL-E 2")
+                st.sidebar.info("🤖 AI-generated contextual padding using OpenAI gpt-image-1")
             else:
                 st.sidebar.error(f"❌ {openai_status}")
                 st.sidebar.warning("AI padding requires OpenAI API key")
@@ -397,13 +446,22 @@ def main():
         help="Extra area around your design for safe cutting"
     )
     
-    # Bleed type selector
+    # Bleed type selector with AI Advanced option
     bleed_types = {
         "content_aware": "Content Aware",
         "mirror": "Mirror Edges",
         "edge_extend": "Edge Extend",
         "solid_color": "Solid Color"
     }
+    
+    # Check OpenAI setup for bleed
+    if bleed_mm > 0:
+        from padding import OPENAI_AVAILABLE, validate_openai_setup
+        openai_ready, openai_status = validate_openai_setup()
+        
+        # Add AI option if available
+        if OPENAI_AVAILABLE:
+            bleed_types["ai_advanced"] = "🤖 AI Advanced (OpenAI)"
     
     bleed_type = st.sidebar.selectbox(
         "Bleed Type",
@@ -627,35 +685,82 @@ def main():
                     if intermediate_images:
                         st.subheader("🔍 Processing Steps")
                         
-                        # Define step descriptions
+                        # Define step descriptions for new gpt-image-1 workflow
                         step_descriptions = {
+                            # Object removal steps
                             'object_mask': '🎯 Object Detection Mask',
                             'after_object_removal': '🧹 After Object Removal',
-                            'processed_for_ai': '🤖 Processed for AI',
-                            'padded_rgba': '📦 RGBA with DOUBLE Padding (Buffer Zone)',
-                            'openai_input': '⬆️ Input to OpenAI (Centered with Equal Padding)',
-                            'openai_mask': '🎭 OpenAI Preservation Mask',
-                            'openai_output': '⬇️ OpenAI Generated Result',
-                            'scaled_to_buffer': '📐 Scaled Back to Buffer Size',
-                            'scaled_back': '✂️ Trimmed to Target Size',
-                            'final_result': '✨ Final with Original Content'
+                            
+                            # AI Padding steps
+                            'rgba_with_padding': '📦 RGBA with Transparent Padding Areas',
+                            'openai_canvas': '📐 Scaled to OpenAI Canvas',
+                            'openai_mask': '🎭 AI Edit Mask (White=Generate, Black=Preserve)',
+                            'openai_input_rgb': '⬆️ RGB Input to OpenAI gpt-image-1',
+                            'openai_output': '⬇️ AI Generated Result',
+                            'extracted_result': '✂️ Extracted from OpenAI Canvas',
+                            'scaled_back': '📏 Scaled Back to Target Size',
+                            'final_result': '✨ Final with Original Content Preserved',
+                            
+                            # AI Bleed steps (with prefixes)
+                            'bleed_rgba_with_bleed': '📏 RGBA with Transparent Bleed Areas',
+                            'bleed_openai_canvas': '📐 Bleed: Scaled to OpenAI Canvas',
+                            'bleed_openai_mask': '🎭 Bleed: AI Edit Mask',
+                            'bleed_openai_input_rgb': '⬆️ Bleed: RGB Input to OpenAI',
+                            'bleed_openai_output': '⬇️ Bleed: AI Generated Result',
+                            'bleed_extracted_result': '✂️ Bleed: Extracted Result',
+                            'bleed_scaled_back': '📏 Bleed: Scaled Back',
+                            'bleed_final_result': '✨ Bleed: Final Result',
+                            
+                            # Combined padding + bleed steps
+                            'padding_rgba_with_padding': '📦 Phase 1: RGBA with Padding',
+                            'padding_openai_canvas': '📐 Phase 1: Padding Canvas',
+                            'padding_openai_mask': '🎭 Phase 1: Padding Mask',
+                            'padding_openai_input_rgb': '⬆️ Phase 1: Padding Input',
+                            'padding_openai_output': '⬇️ Phase 1: Padding Output',
+                            'padding_extracted_result': '✂️ Phase 1: Padding Extracted',
+                            'padding_scaled_back': '📏 Phase 1: Padding Scaled',
+                            'padding_final_result': '✨ Phase 1: Padding Complete',
+                            
+                            # Legacy support for old workflow
+                            'processed_for_ai': '🤖 (Legacy) Processed for AI',
+                            'padded_rgba': '📦 (Legacy) RGBA Buffer Zone',
+                            'openai_input': '⬆️ (Legacy) OpenAI Input',
+                            'scaled_to_buffer': '📐 (Legacy) Scaled to Buffer'
                         }
                         
-                        # Show intermediate images in a grid
-                        cols_per_row = 3
+                        # Show intermediate images in a grid with detailed info
+                        cols_per_row = 2  # Reduced to 2 for better visibility of details
                         current_col = 0
                         cols = st.columns(cols_per_row)
                         
-                        for step_key, img in intermediate_images.items():
+                        # Sort by step number for proper order
+                        sorted_steps = sorted(intermediate_images.items())
+                        
+                        for step_key, step_data in sorted_steps:
                             with cols[current_col]:
-                                description = step_descriptions.get(step_key, step_key.replace('_', ' ').title())
-                                st.image(img, caption=description, use_container_width=True)
-                                
-                                # Show image info
-                                if hasattr(img, 'size'):
-                                    st.caption(f"Size: {img.size[0]}×{img.size[1]}")
-                                elif hasattr(img, 'shape'):
-                                    st.caption(f"Size: {img.shape[1]}×{img.shape[0]}")
+                                # Handle both old format (just image) and new format (dict with image and info)
+                                if isinstance(step_data, dict) and 'image' in step_data:
+                                    img = step_data['image']
+                                    info = step_data['info']
+                                    
+                                    # Create a cleaner title from step key
+                                    step_num = step_key.split('_')[0] if '_' in step_key else ''
+                                    step_name = step_key.replace(step_num + '_', '').replace('_', ' ').title()
+                                    title = f"{step_num}. {step_name}" if step_num else step_name
+                                    
+                                    st.image(img, caption=title, use_container_width=True)
+                                    st.caption(f"📊 {info}")
+                                else:
+                                    # Legacy format - just image
+                                    img = step_data
+                                    description = step_descriptions.get(step_key, step_key.replace('_', ' ').title())
+                                    st.image(img, caption=description, use_container_width=True)
+                                    
+                                    # Show basic image info
+                                    if hasattr(img, 'size'):
+                                        st.caption(f"📊 Size: {img.size[0]}×{img.size[1]}px")
+                                    elif hasattr(img, 'shape'):
+                                        st.caption(f"📊 Size: {img.shape[1]}×{img.shape[0]}px")
                             
                             current_col = (current_col + 1) % cols_per_row
                             if current_col == 0:
@@ -684,25 +789,34 @@ def main():
                                 "color_blend": "Color Blend",
                                 "vintage_vignette": "Vintage Vignette",
                                 "clean_border": "Clean Border",
-                                "ai_advanced": "🤖 AI Advanced"
-                            }
-                            
-                            ai_display_styles = {
-                                "natural": "Natural Extension",
-                                "artistic": "Artistic & Creative",
-                                "minimalist": "Minimalist & Clean",
-                                "textured": "Textured & Detailed",
-                                "blurred": "Blurred & Dreamy"
+                                "ai_advanced": "🤖 AI Advanced (gpt-image-1)"
                             }
                             
                             padding_display = padding_display_styles.get(padding_style, padding_style)
-                            if padding_style == "ai_advanced":
-                                ai_display = ai_display_styles.get(ai_style, ai_style)
-                                st.write(f"**Padding Added:** {padding_mm} mm ({padding_display} - {ai_display})")
-                            else:
-                                st.write(f"**Padding Added:** {padding_mm} mm ({padding_display})")
+                            st.write(f"**Padding Added:** {padding_mm} mm ({padding_display})")
+                            
                         if bleed_mm > 0:
-                            st.write(f"**Bleed Added:** {bleed_mm} mm ({bleed_types[bleed_type]})")
+                            bleed_display_types = {
+                                "content_aware": "Content Aware",
+                                "mirror": "Mirror Edges",
+                                "edge_extend": "Edge Extend",
+                                "solid_color": "Solid Color",
+                                "ai_advanced": "🤖 AI Advanced (gpt-image-1)"
+                            }
+                            bleed_display = bleed_display_types.get(bleed_type, bleed_type)
+                            st.write(f"**Bleed Added:** {bleed_mm} mm ({bleed_display})")
+                            
+                        # Show AI workflow info
+                        use_ai_padding = padding_style == "ai_advanced" and padding_mm > 0
+                        use_ai_bleed = bleed_type == "ai_advanced" and bleed_mm > 0
+                        
+                        if use_ai_padding and use_ai_bleed:
+                            st.write("**AI Workflow:** Combined Padding + Bleed")
+                        elif use_ai_padding:
+                            st.write("**AI Workflow:** Padding Only")
+                        elif use_ai_bleed:
+                            st.write("**AI Workflow:** Bleed Only")
+                            
                         if add_cut_lines_flag and bleed_mm > 0:
                             st.write(f"**Cut Lines:** {cut_line_colors[cut_line_color]}")
                         if rotation_applied:
