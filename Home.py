@@ -56,10 +56,11 @@ st.markdown(
     ## 🤖 AI Features
 
     ### **AI Advanced Page** 🆕
-    - **Intelligent Image Analysis** - Upload an image and describe your print use case (e.g., "postcard", "poster", "business card")
-    - **Smart Recommendations** - AI analyzes your image and suggests optimal processing steps
+    - **Intelligent Analysis** - Upload an image or PDF and describe your print use case (e.g., "postcard", "poster", "business card")
+    - **Smart Recommendations** - AI analyzes your content and suggests optimal processing steps
     - **Expert Guidance** - Get professional advice on rotation, format, bleed, padding, and quality settings
     - **Use Case Optimization** - Tailored recommendations based on your specific printing needs
+    - **PDF Support** - First page analysis for document and presentation printing
 
     ### **Step by Step Processing** 🆕
     - **Object Detection** - Use OpenCV to identify main objects and logos in your images
@@ -75,7 +76,7 @@ st.markdown(
 
     ### **Option 1: AI Advanced (Recommended for beginners)**
     1. **Navigate to AI Advanced** using the sidebar
-    2. **Upload your image** and **describe your use case** (e.g., "postcard")
+    2. **Upload your image or PDF** and **describe your use case** (e.g., "postcard", "document print")
     3. **Get AI recommendations** for optimal print settings
     4. **Apply suggestions manually** or use them as guidance
 
@@ -95,8 +96,9 @@ st.markdown(
 
     ## 🔧 Technical Specifications
 
-    - **Supported Input Formats:** JPG, PNG, PDF
-    - **Output Formats:** PNG, PDF (matches input type)
+    - **Supported Input Formats:** JPG, PNG, PDF (all pages supported)
+    - **Output Formats:** PNG, PDF (matches input type) 
+    - **PDF Processing:** First page analysis for AI Advanced, all pages for manual processing
     - **DPI Range:** 72-2400 DPI
     - **Maximum Bleed:** 10mm
     - **Maximum Padding:** 20mm

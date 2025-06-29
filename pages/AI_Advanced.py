@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
 import json
+import fitz  # PyMuPDF for PDF processing
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -17,6 +18,62 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+def process_uploaded_file(uploaded_file):
+    """Process uploaded file and return PIL Image (handles both images and PDFs)"""
+    try:
+        if uploaded_file.type == "application/pdf":
+            # Handle PDF - ensure we read the bytes properly
+            # Reset file pointer to beginning
+            uploaded_file.seek(0)
+            pdf_bytes = uploaded_file.read()
+            
+            # Check if we actually got bytes
+            if not pdf_bytes:
+                st.error("PDF file appears to be empty")
+                return None
+            
+            # Reset file pointer for potential future reads
+            uploaded_file.seek(0)
+            
+            try:
+                pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            except Exception as pdf_error:
+                st.error(f"Could not open PDF: {str(pdf_error)}")
+                return None
+            
+            if len(pdf_document) == 0:
+                st.error("PDF has no pages")
+                pdf_document.close()
+                return None
+            
+            try:
+                # Get first page as image
+                page = pdf_document[0]
+                mat = fitz.Matrix(2.0, 2.0)  # High resolution
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("png")
+                pdf_document.close()
+                
+                # Convert to PIL Image
+                img = Image.open(io.BytesIO(img_data))
+                return img
+            except Exception as render_error:
+                st.error(f"Could not render PDF page: {str(render_error)}")
+                pdf_document.close()
+                return None
+        else:
+            # Handle image files - also reset file pointer
+            uploaded_file.seek(0)
+            img = Image.open(uploaded_file)
+            # Convert to RGB if needed
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGB')
+            return img
+            
+    except Exception as e:
+        st.error(f"Error processing file: {str(e)}")
+        return None
 
 def encode_image_from_pil(pil_image):
     """Convert PIL Image to base64 string"""
@@ -272,8 +329,8 @@ def main():
     st.markdown("**Intelligent print preparation using AI image analysis**")
     
     st.markdown("""
-    This advanced tool uses OpenAI's vision capabilities to analyze your image and automatically determine 
-    the best print processing steps based on your intended use case.
+    This advanced tool uses OpenAI's vision capabilities to analyze your images and PDFs, automatically determining 
+    the best print processing steps based on your intended use case. For PDFs, the first page is analyzed.
     """)
     
     # Check OpenAI availability
@@ -297,9 +354,9 @@ def main():
         
         # File upload
         uploaded_file = st.file_uploader(
-            "Choose an image file",
-            type=['jpg', 'jpeg', 'png'],
-            help="Upload the image you want to prepare for printing"
+            "Choose an image or PDF file",
+            type=['jpg', 'jpeg', 'png', 'pdf'],
+            help="Upload the image or PDF you want to prepare for printing"
         )
         
         if uploaded_file is not None:
@@ -309,9 +366,12 @@ def main():
             st.write(f"**File size:** {uploaded_file.size / 1024:.1f} KB")
             st.write(f"**File type:** {uploaded_file.type}")
             
-            # Display uploaded image
+            # Process and display uploaded file
             try:
-                image = Image.open(uploaded_file)
+                image = process_uploaded_file(uploaded_file)
+                if image is None:
+                    return
+                
                 st.image(image, caption="Uploaded Image", use_container_width=True)
                 
                 # Show image dimensions
@@ -321,8 +381,12 @@ def main():
                 orientation = "Landscape" if width > height else "Portrait" if height > width else "Square"
                 st.write(f"**Orientation:** {orientation} ({aspect_ratio:.2f})")
                 
+                # Show source type
+                if uploaded_file.type == "application/pdf":
+                    st.info("📄 PDF processed - analyzing first page")
+                
             except Exception as e:
-                st.error(f"Error loading image: {str(e)}")
+                st.error(f"Error loading file: {str(e)}")
                 return
         
         # Use case input
@@ -335,12 +399,13 @@ def main():
         
         # Common use case suggestions
         st.write("**Quick suggestions:**")
-        suggestions = ["Postcard", "Photo Print", "Poster", "Business Card", "Flyer", "Book Cover", "Art Print", "Banner"]
+        suggestions = ["Postcard", "Photo Print", "Poster", "Business Card", "Flyer", "Book Cover", "Art Print", "Banner", "Document Print", "Presentation Slide"]
         
         # Display suggestions as labels
         suggestion_text = " • ".join(suggestions)
         st.caption(f"💡 Examples: {suggestion_text}")
         st.caption("📝 Be as specific as possible for better AI recommendations")
+        st.caption("📄 PDFs supported - first page will be analyzed for print optimization")
     
     with col2:
         st.header("🔍 AI Analysis")
@@ -350,7 +415,11 @@ def main():
                 with st.spinner("Analyzing image with AI..."):
                     # Load and analyze image
                     try:
-                        image = Image.open(uploaded_file)
+                        image = process_uploaded_file(uploaded_file)
+                        if image is None:
+                            st.error("Failed to process uploaded file")
+                            return
+                            
                         analysis_result = analyze_image_with_openai(image, use_case)
                         
                         if analysis_result:
@@ -358,6 +427,7 @@ def main():
                             st.session_state['analysis_result'] = analysis_result
                             st.session_state['analyzed_image'] = image
                             st.session_state['use_case'] = use_case
+                            st.session_state['source_type'] = "PDF" if uploaded_file.type == "application/pdf" else "Image"
                             
                     except Exception as e:
                         st.error(f"Error during analysis: {str(e)}")
@@ -372,7 +442,14 @@ def main():
     # Display analysis results if available
     if 'analysis_result' in st.session_state:
         st.divider()
-        st.header("📊 Analysis Results")
+        
+        # Show header with source type if available
+        source_type = st.session_state.get('source_type', 'Image')
+        st.header(f"📊 Analysis Results ({source_type})")
+        
+        if source_type == "PDF":
+            st.info("📄 Analysis based on first page of PDF document")
+        
         display_analysis_results(st.session_state['analysis_result'])
         
         # Future: Add buttons to apply recommendations automatically
