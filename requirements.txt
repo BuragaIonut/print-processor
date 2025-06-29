@@ -4,5 +4,6 @@ PyMuPDF
 pathlib
 numpy
 opencv-python-headless
+scikit-image
 python-dotenv
 openai
