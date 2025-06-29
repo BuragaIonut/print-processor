@@ -337,13 +337,10 @@ def main():
         st.write("**Quick suggestions:**")
         suggestions = ["Postcard", "Photo Print", "Poster", "Business Card", "Flyer", "Book Cover", "Art Print", "Banner"]
         
-        # Create buttons for quick selection
-        cols = st.columns(4)
-        for i, suggestion in enumerate(suggestions):
-            with cols[i % 4]:
-                if st.button(suggestion, key=f"suggestion_{i}"):
-                    use_case = suggestion
-                    st.rerun()
+        # Display suggestions as labels
+        suggestion_text = " • ".join(suggestions)
+        st.caption(f"💡 Examples: {suggestion_text}")
+        st.caption("📝 Be as specific as possible for better AI recommendations")
     
     with col2:
         st.header("🔍 AI Analysis")
