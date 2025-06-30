@@ -7,3 +7,4 @@ opencv-python-headless
 scikit-image
 python-dotenv
 openai
+gradio_client

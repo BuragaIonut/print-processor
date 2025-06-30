@@ -19,6 +19,7 @@ st.markdown(
     - **Processor** - Manual configuration with full control
     - **AI Advanced** - Intelligent analysis with AI recommendations  
     - **Step by Step** - Granular control over individual processing steps
+    - **Image Extender** - AI-powered image extension for larger formats
 
     ## 🚀 Features
 
@@ -52,6 +53,13 @@ st.markdown(
     - AI-powered object detection and removal
     - Perfect for cleaning up logos, text, and distracting elements
     - Adjustable sensitivity settings
+
+    ### 🎨 **Image Extender** 🆕
+    - AI-powered intelligent image extension
+    - Convert any aspect ratio to your target dimensions
+    - Content-aware extension with style prompts
+    - Perfect for print format preparation
+    - Smart alignment and overlap controls
 
     ## 🤖 AI Features
 
@@ -93,6 +101,14 @@ st.markdown(
     3. **Configure your print settings** (format, DPI, padding, bleed)
     4. **Click "Process for Print"** to generate your print-ready file
     5. **Download the result** in your preferred format
+
+    ### **Option 4: Image Extender (AI-powered extension)**
+    1. **Navigate to Image Extender** using the sidebar
+    2. **Upload your image** (PNG, JPG, JPEG)
+    3. **Set target dimensions** for the extended image
+    4. **Configure alignment and overlap** settings
+    5. **Add optional style prompt** to guide the extension
+    6. **Click "Extend Image"** and download the result
 
     ## 🔧 Technical Specifications
 
