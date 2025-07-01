@@ -28,7 +28,7 @@ def extend_image_with_gradio(image_path, width, height, overlap_percentage, num_
     """Use gradio client to extend the image"""
     try:
         with st.spinner("🤖 Connecting to AI image extension service..."):
-            client = Client("https://lb9gnbvixfcl02-7860.proxy.runpod.net/")
+            client = Client("https://23vhqmty81j0u9-7860.proxy.runpod.net/")
         
         with st.spinner("🎨 Extending your image... This may take a moment..."):
             # The infer function is a generator that yields intermediate results
