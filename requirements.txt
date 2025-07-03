@@ -8,3 +8,5 @@ scikit-image
 python-dotenv
 openai
 gradio_client
+langchain
+langchain-openai
