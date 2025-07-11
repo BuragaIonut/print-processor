@@ -246,8 +246,6 @@ def check_dependencies():
 # Main interface
 st.write("# Print Processor - Quick Processing 🖨️")
 
-st.sidebar.success("Select a page above for advanced features.")
-
 # Check dependencies
 dependency_issues = check_dependencies()
 if dependency_issues:
