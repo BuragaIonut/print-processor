@@ -4,6 +4,7 @@ import base64
 import io
 import os
 import json
+import subprocess
 import fitz  # PyMuPDF for PDF processing
 import tempfile
 import shutil
@@ -601,7 +602,7 @@ def generate_processing_steps(image_size, paper_format, print_requirements, exte
         "sub_steps": [
             f"Scale to {bleed_w}×{bleed_h}px ({dpi} DPI)",
             "Add cut lines for bleeding areas",
-            "Create PDF/X-1 compliant file",
+            "Create PDF/X-1a compliant file using Ghostscript",
             "Generate professional print-ready downloads"
         ]
     })
@@ -681,7 +682,7 @@ def save_image_to_temp(image):
         return None
 
 def create_pdf_x1(image, target_format, dpi, use_case, filename_prefix="print_ready"):
-    """Create PDF/X-1 compliant file from processed image using PyMuPDF"""
+    """Create PDF/X-1a compliant file from processed image using PyMuPDF + Ghostscript"""
     try:
         # Get format dimensions
         format_dims = get_format_dimensions(target_format)
@@ -692,7 +693,7 @@ def create_pdf_x1(image, target_format, dpi, use_case, filename_prefix="print_re
         page_width_pt = page_width_mm * 72 / 25.4
         page_height_pt = page_height_mm * 72 / 25.4
         
-        # Create PDF document
+        # Create PDF document with PyMuPDF
         doc = fitz.open()
         
         # Add page with exact dimensions
@@ -726,18 +727,17 @@ def create_pdf_x1(image, target_format, dpi, use_case, filename_prefix="print_re
         rect = fitz.Rect(x_offset, y_offset, x_offset + scaled_width, y_offset + scaled_height)
         page.insert_image(rect, filename=temp_image_path)
         
-        # Set PDF/X-1 metadata
+        # Set basic metadata
         doc.set_metadata({
             "title": f"{use_case} - {target_format} Print Ready",
             "author": "Print Processor",
             "subject": f"Print-ready {target_format} document for {use_case}",
             "keywords": f"print-ready, {target_format}, {dpi}dpi, {use_case}",
-            "creator": "Print Processor - PDF/X-1 Generator",
-            "producer": "PyMuPDF",
-            "format": "PDF/X-1a:2001"
+            "creator": "Print Processor - PDF/X-1a Generator",
+            "producer": "PyMuPDF + Ghostscript"
         })
         
-        # Save PDF to temporary file
+        # Save initial PDF to temporary file
         temp_pdf_path = tempfile.mktemp(suffix=".pdf")
         doc.save(temp_pdf_path, 
                  garbage=4,  # Clean up
@@ -752,10 +752,84 @@ def create_pdf_x1(image, target_format, dpi, use_case, filename_prefix="print_re
         except:
             pass
         
-        return temp_pdf_path
+        # Convert to PDF/X-1a using Ghostscript
+        output_path = tempfile.mktemp(suffix=".pdf")
+        
+        gs_command = [
+            "gs",
+            "-dPDFX",
+            "-dBATCH",
+            "-dNOPAUSE",
+            "-dUseCIEColor",
+            "-sProcessColorModel=DeviceCMYK",
+            "-sDEVICE=pdfwrite",
+            f"-sOutputFile={output_path}",
+            temp_pdf_path
+        ]
+        
+        try:
+            # Run Ghostscript command
+            result = subprocess.run(
+                gs_command,
+                capture_output=True,
+                text=True,
+                timeout=30  # 30 second timeout
+            )
+            
+            if result.returncode == 0:
+                # Ghostscript succeeded
+                st.success("✅ PDF/X-1a created successfully with Ghostscript")
+                
+                # Clean up temp PyMuPDF file
+                try:
+                    os.unlink(temp_pdf_path)
+                except:
+                    pass
+                
+                return output_path
+            else:
+                # Ghostscript failed, fall back to PyMuPDF version
+                st.warning(f"⚠️ Ghostscript conversion failed (code {result.returncode}), using PyMuPDF version")
+                if result.stderr:
+                    st.write(f"Ghostscript error: {result.stderr}")
+                
+                # Clean up failed output
+                try:
+                    os.unlink(output_path)
+                except:
+                    pass
+                
+                return temp_pdf_path
+                
+        except subprocess.TimeoutExpired:
+            st.warning("⚠️ Ghostscript conversion timed out, using PyMuPDF version")
+            # Clean up failed output
+            try:
+                os.unlink(output_path)
+            except:
+                pass
+            return temp_pdf_path
+            
+        except FileNotFoundError:
+            st.warning("⚠️ Ghostscript not found in system PATH, using PyMuPDF version")
+            # Clean up failed output
+            try:
+                os.unlink(output_path)
+            except:
+                pass
+            return temp_pdf_path
+            
+        except Exception as gs_error:
+            st.warning(f"⚠️ Ghostscript error: {str(gs_error)}, using PyMuPDF version")
+            # Clean up failed output
+            try:
+                os.unlink(output_path)
+            except:
+                pass
+            return temp_pdf_path
         
     except Exception as e:
-        st.error(f"Error creating PDF/X-1: {str(e)}")
+        st.error(f"Error creating PDF: {str(e)}")
         return None
 
 def call_image_extension_api(current_image, target_width, target_height, overlap_left, overlap_right, overlap_top, overlap_bottom):
@@ -1829,7 +1903,7 @@ def main():
         
         **5. Professional Output** 📄
         - 📸 **High-Quality Images**: Download processed images in PNG format
-        - 📄 **PDF/X-1 Compliance**: Professional print-ready PDF files
+        - 📄 **PDF/X-1a Compliance**: Professional print-ready PDF files using Ghostscript for maximum compatibility
         - 🎯 **Print Optimization**: Exact format dimensions with bleeding
         - ⚡ **Instant Download**: Ready for professional printing services
         """)

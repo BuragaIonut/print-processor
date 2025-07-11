@@ -31,11 +31,25 @@ def create_content_aware_bleed(img, bleed_px):
     new_width = width + (2 * bleed_px)
     new_height = height + (2 * bleed_px)
     
-    # Analyze image content
-    dominant_colors = get_dominant_colors(img, 3)
+    # Get image mode and handle different color spaces
+    img_mode = img.mode
     
-    # Create base with dominant color
-    bleed_img = Image.new('RGB', (new_width, new_height), dominant_colors[0])
+    # Analyze image content - convert to RGB temporarily for analysis if needed
+    if img_mode == 'CMYK':
+        rgb_img = img.convert('RGB')
+        dominant_colors = get_dominant_colors(rgb_img, 3)
+    else:
+        dominant_colors = get_dominant_colors(img, 3)
+    
+    # Create base with dominant color in the same mode as input image
+    if img_mode == 'CMYK':
+        # For CMYK, convert RGB dominant color to CMYK
+        rgb_color = Image.new('RGB', (1, 1), dominant_colors[0])
+        cmyk_color = rgb_color.convert('CMYK')
+        base_color = cmyk_color.getpixel((0, 0))
+        bleed_img = Image.new('CMYK', (new_width, new_height), base_color)
+    else:
+        bleed_img = Image.new(img_mode, (new_width, new_height), dominant_colors[0])
     
     if bleed_px > 0:
         # Get corner pixels for smooth corner transitions
@@ -51,63 +65,110 @@ def create_content_aware_bleed(img, bleed_px):
                 dist_from_corner = max(x, y)
                 corner_fade = dist_from_corner / bleed_px
                 
-                # Top-left corner
-                corner_color = Image.blend(
-                    Image.new('RGB', (1, 1), dominant_colors[0]), 
-                    Image.new('RGB', (1, 1), corner_tl), 
-                    corner_fade
-                ).getpixel((0, 0))
-                bleed_img.putpixel((x, y), corner_color)
-                
-                # Top-right corner
-                corner_color = Image.blend(
-                    Image.new('RGB', (1, 1), dominant_colors[0]), 
-                    Image.new('RGB', (1, 1), corner_tr), 
-                    corner_fade
-                ).getpixel((0, 0))
-                bleed_img.putpixel((new_width - 1 - x, y), corner_color)
-                
-                # Bottom-left corner
-                corner_color = Image.blend(
-                    Image.new('RGB', (1, 1), dominant_colors[0]), 
-                    Image.new('RGB', (1, 1), corner_bl), 
-                    corner_fade
-                ).getpixel((0, 0))
-                bleed_img.putpixel((x, new_height - 1 - y), corner_color)
-                
-                # Bottom-right corner
-                corner_color = Image.blend(
-                    Image.new('RGB', (1, 1), dominant_colors[0]), 
-                    Image.new('RGB', (1, 1), corner_br), 
-                    corner_fade
-                ).getpixel((0, 0))
-                bleed_img.putpixel((new_width - 1 - x, new_height - 1 - y), corner_color)
+                # Create corner colors with proper mode handling
+                if img_mode == 'CMYK':
+                    # For CMYK, manually interpolate
+                    def blend_cmyk_colors(c1, c2, ratio):
+                        return tuple(int(c1[i] * (1 - ratio) + c2[i] * ratio) for i in range(4))
+                    
+                    corner_color = blend_cmyk_colors(base_color, corner_tl, corner_fade)
+                    bleed_img.putpixel((x, y), corner_color)
+                    
+                    corner_color = blend_cmyk_colors(base_color, corner_tr, corner_fade)
+                    bleed_img.putpixel((new_width - 1 - x, y), corner_color)
+                    
+                    corner_color = blend_cmyk_colors(base_color, corner_bl, corner_fade)
+                    bleed_img.putpixel((x, new_height - 1 - y), corner_color)
+                    
+                    corner_color = blend_cmyk_colors(base_color, corner_br, corner_fade)
+                    bleed_img.putpixel((new_width - 1 - x, new_height - 1 - y), corner_color)
+                else:
+                    # For RGB and other modes, use Image.blend
+                    corner_color = Image.blend(
+                        Image.new(img_mode, (1, 1), dominant_colors[0]), 
+                        Image.new(img_mode, (1, 1), corner_tl), 
+                        corner_fade
+                    ).getpixel((0, 0))
+                    bleed_img.putpixel((x, y), corner_color)
+                    
+                    corner_color = Image.blend(
+                        Image.new(img_mode, (1, 1), dominant_colors[0]), 
+                        Image.new(img_mode, (1, 1), corner_tr), 
+                        corner_fade
+                    ).getpixel((0, 0))
+                    bleed_img.putpixel((new_width - 1 - x, y), corner_color)
+                    
+                    corner_color = Image.blend(
+                        Image.new(img_mode, (1, 1), dominant_colors[0]), 
+                        Image.new(img_mode, (1, 1), corner_bl), 
+                        corner_fade
+                    ).getpixel((0, 0))
+                    bleed_img.putpixel((x, new_height - 1 - y), corner_color)
+                    
+                    corner_color = Image.blend(
+                        Image.new(img_mode, (1, 1), dominant_colors[0]), 
+                        Image.new(img_mode, (1, 1), corner_br), 
+                        corner_fade
+                    ).getpixel((0, 0))
+                    bleed_img.putpixel((new_width - 1 - x, new_height - 1 - y), corner_color)
         
         # Now extend edges (but skip corners to avoid overlap)
         for i in range(bleed_px):
             fade_ratio = i / bleed_px
             
-            # Top edge (skip corners)
-            top_line = img.crop((0, 0, width, 1))
-            top_faded = Image.blend(Image.new('RGB', (width, 1), dominant_colors[0]), top_line, fade_ratio)
-            # Only paste the middle part, not corners
-            middle_top = top_faded.crop((0, 0, width, 1))
-            bleed_img.paste(middle_top, (bleed_px, i))
-            
-            # Bottom edge (skip corners)
-            bottom_line = img.crop((0, height-1, width, height))
-            bottom_faded = Image.blend(Image.new('RGB', (width, 1), dominant_colors[0]), bottom_line, fade_ratio)
-            bleed_img.paste(bottom_faded, (bleed_px, new_height - 1 - i))
-            
-            # Left edge (skip corners)
-            left_line = img.crop((0, 0, 1, height))
-            left_faded = Image.blend(Image.new('RGB', (1, height), dominant_colors[0]), left_line, fade_ratio)
-            bleed_img.paste(left_faded, (i, bleed_px))
-            
-            # Right edge (skip corners)
-            right_line = img.crop((width-1, 0, width, height))
-            right_faded = Image.blend(Image.new('RGB', (1, height), dominant_colors[0]), right_line, fade_ratio)
-            bleed_img.paste(right_faded, (new_width - 1 - i, bleed_px))
+            # Handle edge blending with proper color mode support
+            if img_mode == 'CMYK':
+                # For CMYK, use manual blending to avoid mode mismatch
+                def blend_image_manual(base_color, line_img, ratio):
+                    blended = line_img.copy()
+                    width_img, height_img = line_img.size
+                    for y in range(height_img):
+                        for x in range(width_img):
+                            pixel = line_img.getpixel((x, y))
+                            new_pixel = tuple(int(base_color[i] * (1 - ratio) + pixel[i] * ratio) for i in range(len(pixel)))
+                            blended.putpixel((x, y), new_pixel)
+                    return blended
+                
+                # Top edge (skip corners)
+                top_line = img.crop((0, 0, width, 1))
+                top_faded = blend_image_manual(base_color, top_line, fade_ratio)
+                bleed_img.paste(top_faded, (bleed_px, i))
+                
+                # Bottom edge (skip corners)
+                bottom_line = img.crop((0, height-1, width, height))
+                bottom_faded = blend_image_manual(base_color, bottom_line, fade_ratio)
+                bleed_img.paste(bottom_faded, (bleed_px, new_height - 1 - i))
+                
+                # Left edge (skip corners)
+                left_line = img.crop((0, 0, 1, height))
+                left_faded = blend_image_manual(base_color, left_line, fade_ratio)
+                bleed_img.paste(left_faded, (i, bleed_px))
+                
+                # Right edge (skip corners)
+                right_line = img.crop((width-1, 0, width, height))
+                right_faded = blend_image_manual(base_color, right_line, fade_ratio)
+                bleed_img.paste(right_faded, (new_width - 1 - i, bleed_px))
+            else:
+                # For RGB and other modes, use Image.blend
+                # Top edge (skip corners)
+                top_line = img.crop((0, 0, width, 1))
+                top_faded = Image.blend(Image.new(img_mode, (width, 1), dominant_colors[0]), top_line, fade_ratio)
+                bleed_img.paste(top_faded, (bleed_px, i))
+                
+                # Bottom edge (skip corners)
+                bottom_line = img.crop((0, height-1, width, height))
+                bottom_faded = Image.blend(Image.new(img_mode, (width, 1), dominant_colors[0]), bottom_line, fade_ratio)
+                bleed_img.paste(bottom_faded, (bleed_px, new_height - 1 - i))
+                
+                # Left edge (skip corners)
+                left_line = img.crop((0, 0, 1, height))
+                left_faded = Image.blend(Image.new(img_mode, (1, height), dominant_colors[0]), left_line, fade_ratio)
+                bleed_img.paste(left_faded, (i, bleed_px))
+                
+                # Right edge (skip corners)
+                right_line = img.crop((width-1, 0, width, height))
+                right_faded = Image.blend(Image.new(img_mode, (1, height), dominant_colors[0]), right_line, fade_ratio)
+                bleed_img.paste(right_faded, (new_width - 1 - i, bleed_px))
     
     # Paste original image
     bleed_img.paste(img, (bleed_px, bleed_px))
@@ -127,7 +188,8 @@ def create_radial_pattern_bleed(img, bleed_px):
         img.getpixel((width-1, height-1)) # Bottom-right
     ]
     
-    bleed_img = Image.new('RGB', (new_width, new_height))
+    # Create image in same mode as input
+    bleed_img = Image.new(img.mode, (new_width, new_height))
     
     # Create radial gradients from each corner
     for y in range(new_height):
@@ -142,12 +204,14 @@ def create_radial_pattern_bleed(img, bleed_px):
             weights = [1/(d_tl+1), 1/(d_tr+1), 1/(d_bl+1), 1/(d_br+1)]
             total_weight = sum(weights)
             
-            # Blend colors based on weights
-            r = sum(corner_colors[i][0] * weights[i] for i in range(4)) / total_weight
-            g = sum(corner_colors[i][1] * weights[i] for i in range(4)) / total_weight
-            b = sum(corner_colors[i][2] * weights[i] for i in range(4)) / total_weight
+            # Blend colors based on weights - handle different color modes
+            num_channels = len(corner_colors[0])
+            blended_color = []
+            for channel in range(num_channels):
+                channel_value = sum(corner_colors[i][channel] * weights[i] for i in range(4)) / total_weight
+                blended_color.append(int(channel_value))
             
-            bleed_img.putpixel((x, y), (int(r), int(g), int(b)))
+            bleed_img.putpixel((x, y), tuple(blended_color))
     
     # Paste original image
     bleed_img.paste(img, (bleed_px, bleed_px))
@@ -159,12 +223,20 @@ def create_noise_texture_bleed(img, bleed_px):
     new_width = width + (2 * bleed_px)
     new_height = height + (2 * bleed_px)
     
-    # Get dominant color
-    dominant_colors = get_dominant_colors(img, 1)
-    base_color = dominant_colors[0]
+    # Get dominant color - convert to RGB for analysis if needed
+    if img.mode == 'CMYK':
+        rgb_img = img.convert('RGB')
+        dominant_colors = get_dominant_colors(rgb_img, 1)
+        # Convert base color to CMYK
+        rgb_color = Image.new('RGB', (1, 1), dominant_colors[0])
+        cmyk_color = rgb_color.convert('CMYK')
+        base_color = cmyk_color.getpixel((0, 0))
+    else:
+        dominant_colors = get_dominant_colors(img, 1)
+        base_color = dominant_colors[0]
     
     # Create noise texture
-    bleed_img = Image.new('RGB', (new_width, new_height), base_color)
+    bleed_img = Image.new(img.mode, (new_width, new_height), base_color)
     
     # Add noise
     for y in range(new_height):
@@ -173,16 +245,15 @@ def create_noise_texture_bleed(img, bleed_px):
             if bleed_px <= x < width + bleed_px and bleed_px <= y < height + bleed_px:
                 continue
                 
-            # Add random noise to base color
-            noise_r = random.randint(-30, 30)
-            noise_g = random.randint(-30, 30)
-            noise_b = random.randint(-30, 30)
+            # Add random noise to base color - handle different color modes
+            num_channels = len(base_color)
+            new_color = []
+            for channel in range(num_channels):
+                noise = random.randint(-30, 30)
+                new_channel = max(0, min(255, base_color[channel] + noise))
+                new_color.append(new_channel)
             
-            new_r = max(0, min(255, base_color[0] + noise_r))
-            new_g = max(0, min(255, base_color[1] + noise_g))
-            new_b = max(0, min(255, base_color[2] + noise_b))
-            
-            bleed_img.putpixel((x, y), (new_r, new_g, new_b))
+            bleed_img.putpixel((x, y), tuple(new_color))
     
     # Apply subtle blur to soften the noise
     bleed_img = bleed_img.filter(ImageFilter.GaussianBlur(radius=0.5))
@@ -197,11 +268,21 @@ def create_dominant_color_bleed(img, bleed_px):
     new_width = width + (2 * bleed_px)
     new_height = height + (2 * bleed_px)
     
-    # Get dominant colors
-    dominant_colors = get_dominant_colors(img, 4)
+    # Get dominant colors - convert to RGB for analysis if needed
+    if img.mode == 'CMYK':
+        rgb_img = img.convert('RGB')
+        rgb_dominant_colors = get_dominant_colors(rgb_img, 4)
+        # Convert dominant colors to CMYK
+        dominant_colors = []
+        for rgb_color in rgb_dominant_colors:
+            rgb_temp = Image.new('RGB', (1, 1), rgb_color)
+            cmyk_temp = rgb_temp.convert('CMYK')
+            dominant_colors.append(cmyk_temp.getpixel((0, 0)))
+    else:
+        dominant_colors = get_dominant_colors(img, 4)
     
     # Create sections with different dominant colors
-    bleed_img = Image.new('RGB', (new_width, new_height))
+    bleed_img = Image.new(img.mode, (new_width, new_height))
     
     # Fill different areas with different dominant colors
     section_width = new_width // 2
@@ -253,13 +334,18 @@ def add_bleed(img, bleed_mm, dpi, bleed_type='content_aware', bleed_color=(255, 
     new_height = height + (2 * bleed_px)
     
     if bleed_type == 'solid_color':
-        # Solid color bleed using color picker
-        bleed_img = Image.new('RGB', (new_width, new_height), bleed_color)
+        # Solid color bleed using color picker - handle CMYK
+        if img.mode == 'CMYK' and len(bleed_color) == 3:
+            # Convert RGB bleed color to CMYK
+            rgb_temp = Image.new('RGB', (1, 1), bleed_color)
+            cmyk_temp = rgb_temp.convert('CMYK')
+            bleed_color = cmyk_temp.getpixel((0, 0))
+        bleed_img = Image.new(img.mode, (new_width, new_height), bleed_color)
         bleed_img.paste(img, (bleed_px, bleed_px))
         
     elif bleed_type == 'edge_extend':
         # Extend edge pixels
-        bleed_img = Image.new('RGB', (new_width, new_height))
+        bleed_img = Image.new(img.mode, (new_width, new_height))
         
         # Fill with extended edge colors
         # Top edge

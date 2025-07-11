@@ -10,3 +10,5 @@ openai
 gradio_client
 langchain
 langchain-openai
+pdf2image
+reportlab
