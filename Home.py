@@ -434,7 +434,7 @@ if uploaded_file is not None:
                     display_height = int(display_image.height * (display_width / display_image.width))
                     display_image = display_image.resize((display_width, display_height), Image.Resampling.LANCZOS)
                     
-                    st.image(display_image, caption=f"Print-ready file with 3mm bleed and cut lines", use_column_width=True)
+                    st.image(display_image, caption=f"Print-ready file with 3mm bleed and cut lines", use_container_width=True)
                     
                 else:
                     st.error("Failed to create PDF file")
